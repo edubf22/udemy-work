@@ -136,6 +136,7 @@ curl https://api.openai.com/v1/completions \
 ```
 
 ## Simple Python Example
+- Install the library (`pip install openai`)
 ```py
 import os
 import openai
@@ -144,3 +145,108 @@ openai.api_key = os.getenv('OPENAI_API')
 
 response = openai.Completion.create(model='text-davinci-003', prompt='Say this is a test', temperature=0, max_tokens=7)
 ```
+
+## Simple Node.js example
+- Install the library (`npm install openai`)
+```
+const { Configuration, OpenAIApi } = require("openai");
+
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
+
+const response = await openai.createCompletion({
+  model: "text-davinci-003",
+  prompt: "Say this is a test",
+  temperature: 0,
+  max_tokens: 7,
+});
+```
+
+## Simple C# example
+- Install the library (`Install-Package OpenAI`)
+```
+var api = new OpenAI_API.OpenAIAPI("sk-myapikeyhere", Engine.Davinci);
+
+var result = await api.Completions.CreateCompletionAsync("Say this is a test", temperature: 0);
+
+// should print something like "\n\n This is indeed a test"
+Cnosole.WriteLine(result.ToString());
+```
+
+## Powershell example
+```
+$apiEndpoint = "https://api.openai.com/v1/completions"
+#apiKey = "sk-APIKEY" 
+
+$headers = @{
+  Authorization = "Bearer $apiKey"
+}
+
+$contenttype = "application/json"
+
+$body = @{
+  model = "text-davinci-003"
+  prompt = "This is only a test"
+} | ConvertTo-Json
+
+$response = Invoke-WebRequest -Uri $apiEndpoint -Method POST -Headers $headers -Body $body -ContentType $contenttype
+
+$generatedText = $response.Content | ConvertFrom-Json
+
+Write-Output $generatedText.choices[0].text
+```
+
+# The Moderation Endpoint
+This is the only free-to-use endpoint and can be used for completions.
+`POST https://api.openai.com/v1/moderations/`
+
+Need to provide some text ('input'). The moderations endpoint looks at how harmful the input could be to the user. There are different categories, such as hate, self-harm, sexual, etc. 
+
+Check out the `moderation.ipynb` notebook for an example. 
+
+# Completion parameters
+## How tokens work
+Each token is given a probability score by the AI, and response is created by joining tokens together that have high probabilities (this can be adjusted with code).
+
+## Calling the API
+
+```
+response = openai.Completion.create(
+ model="text-davinci-003",
+ prompt="What is human life expectancy in the US?",
+ max_tokens=500,
+ temperature=0.1
+)
+```
+We can adjust the request by changing parameters such as `max_tokens` or `temperature`.
+* `max_tokens`: Only cuts the output once the max value is reached, also counts input/query tokens
+* `top_p`: default is 1, 0.9 allows AI to be more creative, 0.3 consider only the top 30% by mass.
+* `temperature`: 0 for well defined answers (token with highest probability), 0.9 for creative applications, 2 would give all tokens same probability 
+* `n`: generate multiple answers (completions), default is 1 - be careful as multiple responses will consume many tokens
+* `stop`: preserves tokens by avoiding verbose responses, defaults to null. Examples: stop=['\n', 'Human:', 'AI:']
+* `best_of`: generates multiple answers on server end, returns the best one (default is 1). This can be combine with `n` to send more than 1 response. This also counts towards the tokens. 
+* `suffix`: Tell the AI what will follow, limited to 40 characters. 
+* `echo`: include the prompt in the completion (default is false, so doesn't include text that was used in the prompt).
+* `user`: optional, useful for policy violations.
+
+# Adjusting probabilities 
+Each token represents a word, or part of a word. There are about to 50,000 tokens in GPT-3. We can check the tokens ![here](https://beta.openai.com/tokenizer).
+
+## logprobs
+We can ask the model what are the highest probability tokens within the response. The tokens are given with a log of the probability (logprob), so the close to 0, the higher the probability.
+
+## Banning tokens - logit_bias
+Assign a Bias by deducting 100 (-100) from a token's logprob. Example:
+```
+response = openai.Completion.create(
+ model='text-davinci-003',
+ prompt='What is the capital of France?',
+ logit_bias: {'6342': -100}
+)
+```
+This would change the logprob for token_id = 6342. We could also address this by adding (instead of deducting) a value to the logprob of the token of interest. 
+
+## Dealing with repetition
+
