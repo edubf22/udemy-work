@@ -88,5 +88,59 @@ Be explicit
  - Position of \n matters (completion or generated a new answer, such as in a dialogue)
  
  - Create smaller tasks (create outline, write intro paragraphs, write a paragraph about..., etc) vs. one large task (write an article about...)
- 
 
+# Prompt Design - Templating
+Enumerate tasks to help the model. Example:
+"""
+1. You are an assistant helping...
+2. ...to generate a <insert task here, e.g. write a blog post>...
+3. ...based on a prompt (e.g. use this format, replacing text in brackets with the result. Do not include the brackets in the output.)
+
+4. Blog post:
+5. #[Title of blog post]
+[Content based on the prompt]
+6. Prompt itself followed by a new line.
+"""
+
+Example:
+"""
+You are an assistant helping to generate a blog post based on a prompt. Use this format, replacing text in brackets with the result. Do not include the brackets in the output:
+
+Blog post:
+# [Title of blog post]
+[Content of blog post]
+"""
+Blue Snowball\n
+
+## Summarizing text
+Summarize this for a 3rd grader. 
+"""
+Provide instructions inside the comment
+"""
+
+# Code examples 
+## Simple CURL example
+```
+curl https://api.openai.com/v1/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API" \
+  -d '{
+  "model": "text-davinci-003",
+  "prompt": "Say this is a test",
+  "temperature": 0.7,
+  "max_tokens": 256,
+  "top_p": 1,
+  "frequency_penalty": 0,
+  "presence_penalty": 0
+}'
+```
+
+## Simple Python Example
+```py
+import os
+import openai
+
+openai.api_key = os.getenv('OPENAI_API')
+
+response = openai.Completion.create(model='text-davinci-003', prompt='Say this is a test', temperature=0, max_tokens=7)
+```
