@@ -249,4 +249,205 @@ response = openai.Completion.create(
 This would change the logprob for token_id = 6342. We could also address this by adding (instead of deducting) a value to the logprob of the token of interest. 
 
 ## Dealing with repetition
+* `presence_penalty`: a way to adjust the chances of a token being reused in a response. It doesn't matter how many times a word has been used, it will be penalized by the same amount throughout the response.
+* `frequency_penalty`: cumulative, so the more a token is used, the less likely it is to appear again. 
+Default for both is 0, range is -2 to 2.
 
+# Coding for Edits
+`POST https://api.openai.com/v1/edits`
+- Uses a different model than `Completion`, with input and instruction.
+
+```
+openai.Edit.create(
+ model='text-davinci-edit-001',
+ input='What day of the eek is it?',
+ instruction='Fix the spelling mistakes'
+)
+```
+Response is a json file. We can add other parameters such as top_p, n, to edit the responses. 
+
+# Coding to create images - DALL-E
+Creates images from text. Images are always squared and in PNG format. 
+
+## Create a new image example
+- `prompt`: used to describe the image we require. 
+- `size`: 256x256, 512x512, 1024x1024
+- `response_format`: Can be returned as a URL 
+- `n`: generate 20 images per minute
+- `user` :for identification/security purposes
+
+`POST https://api.openai.com/v1/images/generations`
+
+```
+response = openai.Image.create(
+ prompt='An armchair in the shape of an Avocado',
+ n=1,
+ size='1024x1024'
+)
+```
+Response will give a temporary URL valid for an hour - save it before it expires at this costs tokens.
+
+## Modifying images
+`POST https://api.openai.com/v1/images/edits`
+Edit existing images. The need to be in an appropriate size (<4MB) and in PNG format. Also requires a mask image, which would be the same image with an area of it erased. 
+
+```
+response = openai.Image.create_edit(
+ image=open('sunlit_lounge.png', 'rb'),
+ mask=open('mask.png', 'rb'),
+ prompt='A sunlit indoor lounge area with a pool containing a flamingo',
+ n=1,
+ size='1024x1024'
+)
+
+image_url = response['data'][0]['url']
+```
+
+## Variations of an image
+`https://api.openai.com/v1/images/variations`
+Variation of an image. Provide a source image (PNG), size and response_format. 
+
+## Tips for handling images in Python
+Convert an image to the right dimensions. Load an image first, convert it to byte stream and then into a byte array before feeding to the model.
+
+```
+from io import BytesIO
+from PIL import image
+
+# Read the image file from disk and resize it
+image = Image.open('image.png')
+width, height = 256, 256
+image = image.resize((width, height))
+
+# This is the BytesIO object that contains the image
+byte_stream = BytesIO()
+image.save(byte_stream, format='PNG')
+byte_array = byte_stream.getvalue()
+
+response = openai.Image.create_variation(
+ image=byte_array,
+ n=1,
+ size='1024x1024'
+)
+```
+
+## Image moderation
+If an image violates the OpenAI policy, an error will be sent back.
+
+# Codex
+GPT has been trained on different GitHub repositories. It can turn comments into code, complete lines or functions, refer to different libraries or API calls, add comments, and rewrite code. 
+
+Same endpoints (`completion` and `edits`), but different models: `code-davinci-002`, `code-cushman-001`.
+
+## Writing codex
+Use comment language such as:
+```
+"""
+Ask the user their name and say hello.
+"""
+```
+
+## Generating SQL
+```
+""" 
+Comment with table name, columns, and instructions, such as 'Create a MySQL query for all customers in Texas named Jane
+"""
+query = <AI will fill this>
+
+run_query(query) # use this to stop the AI from using too many tokens
+```
+
+## Exlpaining code
+Include function commented at the top, then ask AI for explanation in human readable form. 
+
+## Best practice
+- Start prompt with a comment (`//`, `#` or `"""`)
+- Finish code wit ha question (as a comment)
+- Specify the language in the first comment (i.e. # Python language)
+- Tell codex wich libraries to use
+- Lower temperature close to 0 to get more precise results
+- Be as precise as possible in comments, specify libraries and variables that we want to use
+
+## Fixing errors
+<code for a broken function>
+"""
+Explain why the previous function doesn't work.
+"""
+
+## Converting between languages
+```
+# Convert this from Python to R
+# Python Version
+
+[ Python code ]
+
+# End
+
+# R Version
+```
+
+## Building code
+Using the `edits` endpoint, we can provide a function or blank as an input, and then instructions on what to do, such as 'Include documentation'.
+
+# Fine-tuning
+`https://api.openai.com/v1/fine-tunes`
+Once the model has been fine tuned, we don't need to provide as many examples anymore, thus saving on costs and making the process more efficient. 
+
+- Prepare a training data file (JSONL)
+- Upload the file
+- Tell the model to import the file
+- Use the new model for fine-tuned responses
+- Consider training a lower cost model to save on money **(ada instead of davinci if we don't need the conversation to go in every direction, but rather focused on the topic/application)**.
+
+## Preparing Training Data
+```
+{"prompt": "<prompt text>", "completion": "<ideal generated text"}
+{"prompt": "<prompt text>", "completion": "<ideal generated text"}
+{"prompt": "<prompt text>", "completion": "<ideal generated text"}
+...
+```
+
+- More than a couple hundred sets work best
+- Increasing examples is the best way to improve performance
+
+## Different types of training
+There are different ways we train the model during fine tuning - classification, summarize, expand, extract. In all cases, we need to provide a training data set (JSONL file). In this file, include a file with a prompt, followed by a clear marker showing the end of the prompt, and then providing a completion (preceded by a space). 
+- Need to keep in mind the token limit for different models!
+
+## Training to expand
+Design idea: create sales description from product properties
+- prompt: `"<properties>\n\n###\n\n"`
+- completion: `"<sales descriptions>END"`
+
+## Extract entities from text
+- Extract 3 entities from an email ,such as a name, email address, phone number
+- prompt: "<any text, for example news article>\n\n###\n\n"
+- completion : " <extracted data> END"
+- It's **key** to stay consistent with how we format the prompt and the completion.
+
+## Chatbots
+- No memory of previous answers
+- Create a fine tuning file with examples of how the bot behaves
+- Can easily go off track, need to keep that in mind for cost and also to add restrictions
+
+### Design idea - customer service chatbot
+- prompt should include a summary of the interaction so far, specific information, and then an example of the dialogue
+```
+"Summary: <summary of the interaction so far>\n\nSpecific information: <e.g. order details in natural language>\n\n###\n\nCustomer: <message1>\nAgent: <response1>\n\nCustomer: <message2>\nAgent:"
+```
+Each customer example needs a custom response. 
+
+- completion: " <response2>\n\n"
+
+Best results are usually obtained when using real-world data. Only the last response should be in the completion part.
+
+### Large documents or text
+Because of the maximum number of tokens, it is hard to handle large documents. 
+- Embedding is a better option
+
+### Final tips
+- The separator (in this course `\n\n###\n\n`) must not appear in the body of the prompt
+- Always start the completion with a space - this improves model performance
+- Make sure prompt ends with a label and a column
+- Use Stop text (END or\n) to prevent AI from adding random test
+- Upper and lower case matter a lot! Use it when it is correct, such as the beginning of a sentence or in city name.
