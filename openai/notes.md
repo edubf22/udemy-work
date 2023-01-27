@@ -451,3 +451,35 @@ Because of the maximum number of tokens, it is hard to handle large documents.
 - Make sure prompt ends with a label and a column
 - Use Stop text (END or\n) to prevent AI from adding random test
 - Upper and lower case matter a lot! Use it when it is correct, such as the beginning of a sentence or in city name.
+
+# Generating fine-tuning datasets
+Instead of creating these manually, we could scrape data off the internet that could be used for fine-tuning. 
+
+Another alternative would be to use GPT to generate training data. For example, use the more advanced Davinci model to train the ADA model on a focused topic. We could also write a code to first write questions for a text, and then use GPT to answer these questions. You can then store the data as a json file to be used during fine tuning. 
+
+# Uploading and processing fine tuning files
+Use the method:
+
+```
+openai.File.create(
+ file=open("mydata.jsonl", "rb"),
+ purpose="fine-tune"
+)
+```
+ID: uploaded file gets an ID, we need to keep track of it so we can use it when it comes to trigerring the training
+
+Once file has been uploaded, we can use it to fine tune the model:
+```
+openai.FineTune.create(
+ training_file='<file ID generated at upload>',
+ model='ada',
+ suffix='chatbot'
+)
+```
+We only need to provide the base name of the model, not '001'. We can also use the name of our existing model to the model parameter. Suffix can be used to make it easier to identify the model. 
+
+## Unicode errors
+The model may not recognize emojis and such. In that case, we will get a `UnicodeEncodeError`. 
+
+
+
