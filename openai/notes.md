@@ -481,5 +481,175 @@ We only need to provide the base name of the model, not '001'. We can also use t
 ## Unicode errors
 The model may not recognize emojis and such. In that case, we will get a `UnicodeEncodeError`. 
 
+# Embedding, searching and integrating large documents and text
+Embedding: representing words as a string of floats, which is then converted to a vector that can be represented in a multidimensional space. Similar words will have similar coordnates (thus will be closer in space), while different words will have more different coordinates (and will be farther apart in space). 
 
+## Embedding engine
+We can use the `text-embedding-ada-002`. This allows us to use up to 8192 characters. 
+
+## Creating first embedding vector
+Example: "she went fishing"
+
+```
+response = openai.Embedding.create(
+ input="she went fishing",
+ model="text-embedding-ada-002"
+)
+```
+
+This return a large list of floating points 
+- 1536 numbers for ada-002
+
+- `response['data'][0]['embedding']`
+
+- embedding: compare two or more strings and see how similar they are
+
+## Libraries used during embedding
+- Work with CSV files for the course
+- Pandas, NumPy, OpenAI
+- Also use `from openai.embeddings_utils import get_embedding, cosine_similarity`
+- Cosine similarity is handy when comparing how similar two strings are
+
+## Text similarity
+- Get the vectors for multiple blocks of text:
+
+```
+import openai
+
+response = openai.Embedding.create(
+ input=[
+ 	"Eating food",
+ 	"I am hungry", 
+ 	"I am traveling", 
+ 	"Exploring new places"],
+ model="text-embedding-ada-002"
+)
+```
+We can read the vectors from the response object. For example, the respective vectors for the strings above are:
+```
+vector1 = response['data'][0]['embedding']
+vector2 = response['data'][1]['embedding']
+vector3 = response['data'][2]['embedding']
+vector4 = response['data'][3]['embedding']
+```
+
+### Calculating the distance
+To find the distance between two phrases, we need to calculate the "dot product" of the two vectors
+
+```
+import numpy as np
+
+distance = np.dot(vector1, vector2)
+```
+
+This will give a float value, such as 0.87365. WE can then compare it with the dot product between different phrases (make sure to reuse one of the phrases so we can compare the results). The new distance value is 0.78477. The closer the value is to 1, the more similar the two sentences are.
+
+## Embedding data
+Good to use local system when doing this. But how do we perform this on a document or blocks of text?
+- Semantic search: use smaller blcks of text, vectorize it, and then compare the blocks for similarity. 
+
+### Preprocessing the data
+For embedding these blocks of text, we first need to preprocess the data. In that case, it is useful to use: 
+- `pandas`: load the dataset as a dataframe
+	- Actions: rename columns, handling of missing values, combining features (such as `Title` and `Summary` columns into a single new feature `Combined`)
+- library to count tokens (e.g. `transformers`): useful to make sure we have the right number of tokens and don't break the model
+	- ```
+	from transformers import GPT2TokenizerFast
+	tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+	```
+	- Create a column with number of tokens (n_tokens):
+	```
+	df[n_tokens'] = df['Combined'].apply(lambda x: len(tokenizer.encode(x)))
+	```
+	- Only keep reviews that aren't over the max token limit:
+	`df = df[df['n_tokens'] < 8000]`
+
+### Get embeddings and save
+To get embeddings, we apply a lambda function to our pandas DataFrame calling the get_embedding method
+```
+df['ada_vector'] = df['Combined'].apply(
+ lambda x: get_embedding(x, engine='text-embedding-ada-002')
+)
+
+df.to_csv('data/embedded_reviews.csv', index=False)
+```
+
+```
+def get_embedding(text, model='text-embedding-ada-002'):
+	# Import library
+	import openai
+
+	# Swap \n for spaces
+	text = text.replace('\n', ' ')
+	
+	# Call the API with the parameters
+	# return ['data'][0]['embedding']
+	# This is the 2D vector for the text
+	return openai.Embedding.create(
+	 input=[text],
+	 model=model)['data'][0]['embedding']
+```
+
+### Using saved data
+```
+import pandas as pd
+import numpy as np
+
+# read the csv output file
+df = pd.read_csv('output/embedded_reviews.csv')
+
+# Convert the strings stored in the ada_vector column into vector objects
+df['ada_vector'] = df['ada_vector'].apply(eval).apply(np.array)
+
+# We can access the values using 
+df.loc[0]['ada_vector']
+```
+
+### Define a semantic search function
+Get an embedding vector for the users question or text query
+
+```
+# convert our search term into a vector
+searchvector = get_embedding(
+ 'delicious beans', 
+ model='text-embedding-ada-002'
+)
+
+# create a new column using cosine similarity on every row
+# comparing our searchvector string to the value in our local dataset
+df['similarities'] = df['ada_vector'].apply(
+ 				lamda x: cosine_similarity(x, searchvector))
+
+```
+
+**Cosine similarity**: also called cosine distance. The closer two words or items are to each other, the smaller the angle between them. That means, the smaller the angle, the more similar the items. Therefore, if the cos similarity is close to 1, the words are very similar, and if close to 0, the words are assimilar.  
+
+```
+# Sort the values by the cosine similarity and take the top n rows
+# response is up to 3 rows, it contains all the data
+res = df.sort_values('similarities', ascending=False).head(3)
+
+# we can access the combined column to get the matching text
+# we could also access any of the other columns in the DataFrame
+res.loc[0]['combined]
+```
+
+### Combining other libraries with GPT
+Other libraries with word embedding capability can be used for embedding:
+- `Word2Vec`
+- `Glove`
+- `BERT`
+- `Fasttext`
+
+All have their own pros and cons.
+
+Procedure when working with GPT and Word2Vec
+- Use Word2Vec to generate vectors
+- Store the vectors with the data
+- Convert query to vector using Word2Vec
+- Extract the text from the best result
+- Build a prompt using the text as context
+- Call GPT with the prompt
+
+## Classifying data using embedding
 
