@@ -652,4 +652,30 @@ Procedure when working with GPT and Word2Vec
 - Call GPT with the prompt
 
 ## Classifying data using embedding
+Dataset with description, a vector representation of this description, and a category. For example, a description about a toy, its vector representation, and category ('toy'). This is similar to a classical machine learning classification problem. 
+
+First step is loading the dataset and embedding the field that we will want to classify, in this case the description.
+
+We could use different algorithms for this, such as `RandomForestClassifier`, to perform classification.
+```
+from sklearn.ensemble import RandomForestClassifier
+
+# Create 100 empty trees
+clf = RandomForestClassifier(n_estimators=100)
+
+# Fit - fill all trees with the training set
+clf.fit(df['ada_vector'].values, df['Category'].values)
+```
+
+Encode and run the query:
+```
+# Encode the test string into an embedding vector
+testme = openai.Embedding.create(
+ input='<our product description>',
+ model='text-embedding-ada-002'
+)
+
+# Use the trees to vote on the best value/category for our string
+prediction = clf.predict(testme)
+```
 
