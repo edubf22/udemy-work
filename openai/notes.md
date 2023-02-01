@@ -369,17 +369,20 @@ Include function commented at the top, then ask AI for explanation in human read
 - Be as precise as possible in comments, specify libraries and variables that we want to use
 
 ## Fixing errors
-<code for a broken function>
+```
+<Code for a broken function>
+
 """
 Explain why the previous function doesn't work.
 """
+```
 
 ## Converting between languages
 ```
 # Convert this from Python to R
 # Python Version
 
-[ Python code ]
+<Python code>
 
 # End
 
@@ -391,6 +394,7 @@ Using the `edits` endpoint, we can provide a function or blank as an input, and 
 
 # Fine-tuning
 `https://api.openai.com/v1/fine-tunes`
+
 Once the model has been fine tuned, we don't need to provide as many examples anymore, thus saving on costs and making the process more efficient. 
 
 - Prepare a training data file (JSONL)
@@ -433,7 +437,7 @@ Design idea: create sales description from product properties
 ### Design idea - customer service chatbot
 - prompt should include a summary of the interaction so far, specific information, and then an example of the dialogue
 ```
-"Summary: <summary of the interaction so far>\n\nSpecific information: <e.g. order details in natural language>\n\n###\n\nCustomer: <message1>\nAgent: <response1>\n\nCustomer: <message2>\nAgent:"
+"{Summary: <summary of the interaction so far>\n\nSpecific information: <e.g. order details in natural language>\n\n###\n\nCustomer: <message1>\nAgent: <response1>\n\nCustomer: <message2>\nAgent:"
 ```
 Each customer example needs a custom response. 
 
@@ -553,7 +557,7 @@ For embedding these blocks of text, we first need to preprocess the data. In tha
 - `pandas`: load the dataset as a dataframe
 	- Actions: rename columns, handling of missing values, combining features (such as `Title` and `Summary` columns into a single new feature `Combined`)
 - library to count tokens (e.g. `transformers`): useful to make sure we have the right number of tokens and don't break the model
-	- ```
+	```
 	from transformers import GPT2TokenizerFast
 	tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
 	```
@@ -562,7 +566,9 @@ For embedding these blocks of text, we first need to preprocess the data. In tha
 	df[n_tokens'] = df['Combined'].apply(lambda x: len(tokenizer.encode(x)))
 	```
 	- Only keep reviews that aren't over the max token limit:
-	`df = df[df['n_tokens'] < 8000]`
+	```
+	df = df[df['n_tokens'] < 8000]
+	```
 
 ### Get embeddings and save
 To get embeddings, we apply a lambda function to our pandas DataFrame calling the get_embedding method
@@ -654,9 +660,22 @@ Procedure when working with GPT and Word2Vec
 ## Classifying data using embedding
 Dataset with description, a vector representation of this description, and a category. For example, a description about a toy, its vector representation, and category ('toy'). This is similar to a classical machine learning classification problem. 
 
-First step is loading the dataset and embedding the field that we will want to classify, in this case the description.
+First step is loading the dataset and embedding the field that we will want to classify, in this case the description. We can work with the dataset from semantic search. 
+
+Then, split dataset into train and test sets
+```
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(
+ list(df.ada_vector.values),
+ df.Category,
+ test_size=0.2,
+ random_seed=42
+)
+```
 
 We could use different algorithms for this, such as `RandomForestClassifier`, to perform classification.
+
 ```
 from sklearn.ensemble import RandomForestClassifier
 
@@ -664,7 +683,7 @@ from sklearn.ensemble import RandomForestClassifier
 clf = RandomForestClassifier(n_estimators=100)
 
 # Fit - fill all trees with the training set
-clf.fit(df['ada_vector'].values, df['Category'].values)
+clf.fit(X_train, y_train)
 ```
 
 Encode and run the query:
@@ -676,6 +695,105 @@ testme = openai.Embedding.create(
 )
 
 # Use the trees to vote on the best value/category for our string
-prediction = clf.predict(testme)
+y_pred = clf.predict(X_test)
 ```
 
+Evaluate the model
+```
+from sklearn.metrics import accuracy_score
+print("Accuracy:", accuracy_score(y_test, y_pred))
+```
+
+## Clustering data using embedding
+Used to find hidden groupings within a random dataset. This is an unsupervised machine learning method. In this case, we can use GPT to cluster different reviews.
+
+### Loading the dataset
+```
+import pandas as pd
+import numpy as np
+
+# read the csv file with embedded reviews
+df = pd.read_csv('output/embedded_reviews.csv')
+
+# Convert the strings stored in the ada_vector column to vectors
+df['ada_vector'] = df['ada_vector'].apply(eval).apply(np.array)
+```
+
+This results into a dataset with an `ada_vector` column as a vector, and we can use the ratings for clustering.
+
+Now, place the vectors into a list:
+```
+# This is our training data
+vectorlist = np.vstack(df['ada_vector'].values)
+```
+
+Find the centroids using KMeans
+```
+from sklearn.cluster import KMeans
+
+# Setup our KMeans parameters 
+results = KMeans(
+	n_clusters=4,
+	init='k-means++',
+	random_state=42,
+	n_init='auto'
+)
+
+# Now we fit our vector list on top of the results model
+results.fit(vectorlist)
+```
+
+Extract and store the clusters:
+```
+# results has our labels (0, 1, 2, 3 - because we set the k value to 4)
+labels = results.labels_
+
+# Create a new column in our dataframe with cluster number
+df['ClusterNum'] = labels
+```
+
+Now we can explore the clusters and see what they have in common. Instead of using a loop to show entries for each cluster, let's use GPT what is common between them.
+```
+testcluster = 0
+
+reviewsamples = '\n'.join(
+	df[df['ClusterNum] == testcluster] # filter for cluster 0
+	.combined.str.replace('Title: ', '') # removing the title
+	.str.replace('\n\nContent: ', ': ') # removing the content label
+	.str.replace('\n', ' ') # removing extra lines
+	.sample(3, random_state=42)
+	.values
+)
+```
+
+We can ask the GPT model what the above reviews have in common. 
+
+Summary:
+- training dataset is kept in local machine
+- do not use it to train GPT
+- need to calculate vectors
+- convert prompt or new entry to a vector that can be compared to local dataset
+
+# Creative writing
+ Brainstorm blog post outline ideas for the topic 'x':
+
+ Create an outline for an artile about 'x':
+
+What are 5 key points I should know when writing about 'topic1'?
+
+Write 3 engaging and informative paragraphs about 'point 1 description':
+
+'concatenaded content'
+Write a short super engaging blog post introduction:
+
+'concatenaded content'
+Write a short super engaging conclusion:
+
+We can also use GPT to expand on existing text, summarize text, extract facts from a passage, and for rewriting existing articles. 
+
+# Creating a Chatbot with GPT
+Use OpenAI `Completion` endpoint to creat a Chatbot (at least until ChatGPT API is released). 
+
+## The Basics 
+Create an interface where the chat box will be displayed using a language of choice. Then, we can call the completion function to send the question to the AI and receive a reply. 
+```
